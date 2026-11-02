@@ -1,0 +1,13 @@
+{
+  "name": "chacha20-poly1305-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas locales de rendimiento de ChaCha20-Poly1305 y AES-GCM",
+  "scripts": {
+    "start": "node servidor.js",
+    "test": "node test/chacha.test.js",
+    "bench:openssl": "node experimento1-openssl.js",
+    "bench:custom": "node experimento2-custom.js"
+  },
+  "engines": { "node": ">=18" }
+}

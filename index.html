@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laboratorio ChaCha20-Poly1305</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color:#222;background:#fff;font-size:14px}body{max-width:1000px;margin:28px auto;padding:0 18px;line-height:1.45}h1{font-size:23px;margin-bottom:5px}h2{font-size:18px;margin:25px 0 9px}small,.muted{color:#666}hr{border:0;border-top:1px solid #ddd;margin:20px 0}section{border:1px solid #ccc;padding:15px;margin:13px 0}button,input{font:inherit}button{padding:7px 13px;border:1px solid #999;border-radius:2px;background:#f4f4f4;cursor:pointer}button:hover{background:#e9e9e9}button:disabled{opacity:.45;cursor:not-allowed}input{width:74px;padding:6px;border:1px solid #aaa}label{display:inline-block;margin:8px 18px 8px 0}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:7px 9px;border-bottom:1px solid #ddd;text-align:left}th{background:#f2f2f2}td.num{text-align:right;font-variant-numeric:tabular-nums}.table-wrap{overflow-x:auto}pre{background:#f7f7f7;border:1px solid #ddd;padding:10px;max-height:195px;overflow:auto;white-space:pre-wrap;font-size:12px}img.chart{display:block;max-width:100%;border:1px solid #ddd;margin:12px 0}a{color:#174d80}#status{font-weight:bold}#status.error{color:#a22} .row{display:flex;gap:15px;align-items:center;flex-wrap:wrap}.links a{margin-right:16px} .hidden{display:none}#hardware{font-size:13px}
+</style>
+</head>
+<body>
+<h1>Laboratorio ChaCha20-Poly1305</h1>
+<p class="muted">Abrí esta página desde <code>http://127.0.0.1:3000</code>, iniciando antes <code>iniciar.bat</code> (Windows) o <code>./iniciar.sh</code> (Linux). Pruebas de rendimiento locales. Los resultados se obtienen en este equipo y pueden exportarse para el informe.</p>
+<section><strong>Equipo y entorno</strong><p id="hardware">Cargando...</p></section>
+<section>
+<h2>Experimento 1 — OpenSSL</h2>
+<p>Comparación de ChaCha20-Poly1305, AES-128-GCM y AES-256-GCM mediante OpenSSL CLI.</p>
+<label>Repeticiones <input id="r1" type="number" min="1" max="20" value="3"></label>
+<label>Segundos por medición <input id="d1" type="number" min="1" max="20" value="1"></label>
+<button class="run" data-id="openssl">Ejecutar prueba 1</button>
+<p class="muted">15 configuraciones (3 algoritmos × 5 tamaños). Puede demorar según las repeticiones.</p>
+</section>
+<section>
+<h2>Experimento 2 — Implementación propia</h2>
+<p>Comparación de ChaCha20-Poly1305 en JavaScript didáctico frente a <code>node:crypto</code> (OpenSSL nativo).</p>
+<label>Repeticiones <input id="r2" type="number" min="1" max="30" value="5"></label>
+<label>Milisegundos por medición <input id="d2" type="number" min="20" max="10000" value="150"></label>
+<button class="run" data-id="custom">Ejecutar prueba 2</button>
+<p class="muted">Esta prueba mide la diferencia entre implementaciones, no entre algoritmos distintos.</p>
+</section>
+<section>
+<strong>Estado:</strong> <span id="status">Listo</span>
+<pre id="log">Todavía no se ejecutaron pruebas en esta sesión.</pre>
+</section>
+<h2>Resultados</h2>
+<div id="results"><p class="muted">Sin resultados todavía.</p></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const formats={openssl:'OpenSSL: algoritmos',custom:'Implementación propia vs nativa'};
+let previouslyRunning=false;
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function api(p,options){
+  let r;
+  try { r=await fetch(p,options); }
+  catch(e) { throw new Error('No hay conexión con el servidor local. Ejecutá iniciar.bat y abrí http://127.0.0.1:3000 (no abras index.html directamente).'); }
+  let v;try {v=await r.json();} catch(e){throw new Error('El servidor no devolvió una respuesta válida: '+r.status);}
+  if(!r.ok)throw Error(v.error||r.status);return v;
+}
+
+async function init(){if(location.protocol==='file:'){document.querySelector('#hardware').textContent='Abriste el archivo HTML directamente. Cerrá esta pestaña, ejecutá iniciar.bat y entrá a http://127.0.0.1:3000';$('status').textContent='Servidor local no iniciado';$('status').className='error';document.querySelectorAll('button.run').forEach(b=>b.disabled=true);return;}try{const v=await api('/api/info');const h=v.hardware;$('hardware').textContent=`${h.cpu} · ${h.nucleos_logicos} hilos lógicos · ${h.ram_GiB} GiB RAM · ${h.sistema} · ${h.arquitectura} · Node ${h.node} · OpenSSL integrado ${h.openssl_node}`; $('hardware').textContent += v.openssl_cli?.disponible ? ` · OpenSSL CLI ${v.openssl_cli.version}` : ' · OpenSSL CLI NO encontrado (experimento 1 requiere openssl.exe)';}catch(e){$('hardware').textContent=e.message;}await refreshResults();await poll();}
+async function run(id){const repeats=Number($(id==='openssl'?'r1':'r2').value);const duration=Number($(id==='openssl'?'d1':'d2').value);try{await api('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({experiment:id,repeats,duration})});await poll();}catch(e){$('status').textContent='Error: '+e.message;$('status').className='error';}}
+async function poll(){try{const s=await api('/api/status');document.querySelectorAll('button.run').forEach(b=>b.disabled=s.running);$('status').textContent=s.running?`Ejecutando ${formats[s.experiment]}...`:s.error?`Error: ${s.error}`:s.ended?'Prueba finalizada':'Listo';$('status').className=s.error?'error':'';$('log').textContent=s.log.join('\n')||'Todavía no se ejecutaron pruebas en esta sesión.';if(previouslyRunning&&!s.running)await refreshResults();previouslyRunning=s.running;}catch(e){$('status').textContent=e.message;$('status').className='error';}}
+async function refreshResults(){try{const v=await api('/api/results');const html=[];for(const [id,title] of Object.entries(formats)){const data=v[id];if(!data||!data.resumen)continue;const prefix=id==='openssl'?'openssl':'custom';html.push(`<section><h2>${esc(title)}</h2><p class="muted">Fecha: ${esc(data.fecha||data.metadatos?.fecha||'—')} · CPU: ${esc(data.metadatos?.cpu||'—')}</p><div class="links"><a href="/resultados/${prefix}-resumen.csv">CSV resumen</a><a href="/resultados/${prefix}-detalle.csv">CSV detalle</a><a href="/resultados/${prefix}-datos.json">JSON completo</a><a href="/resultados/${prefix}-grafico.svg">Gráfico SVG</a></div><img class="chart" src="/resultados/${prefix}-grafico.svg?t=${Date.now()}" alt="Gráfico de rendimiento de ${esc(title)}"><div class="table-wrap"><table><thead><tr><th>Algoritmo / implementación</th><th>Tamaño</th><th>Mediana (MB/s)</th>${id==='custom'?'<th>μs/operación</th>':''}<th>Repeticiones</th></tr></thead><tbody>${data.resumen.map(r=>`<tr><td>${esc(r.algoritmo)}</td><td>${r.bytes>=1024?esc(r.bytes/1024)+' KiB':esc(r.bytes)+' B'}</td><td class="num">${Number(r.mbps).toLocaleString('es-AR',{maximumFractionDigits:3})}</td>${id==='custom'?`<td class="num">${Number(r.microseg_por_operacion).toLocaleString('es-AR',{maximumFractionDigits:3})}</td>`:''}<td class="num">${esc(r.n)}</td></tr>`).join('')}</tbody></table></div></section>`);} $('results').innerHTML=html.join('')||'<p class="muted">Sin resultados todavía.</p>';}catch(e){$('results').textContent='No se pudieron cargar resultados: '+e.message;}}
+document.querySelectorAll('button.run').forEach(b=>b.addEventListener('click',()=>run(b.dataset.id)));
+init();setInterval(poll,1000);
+</script>
+</body></html>
